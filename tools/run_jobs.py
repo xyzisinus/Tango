@@ -21,7 +21,6 @@ if cmdLine.args.jobs:
   cmd.jobs()
   exit()
 
-
 startTime = time.mktime(datetime.datetime.now().timetuple())
 outputFiles = []
 
@@ -154,6 +153,12 @@ for labIndex in cmdLine.args.indecies:
   # run students in a given order
   studentIndexList.sort()
   studentsToRun.sort()
+
+  # poll output file for the specified students
+  if cmdLine.args.poll:
+    for studentIndex in studentIndexList:
+      cmd.poll(lab, student2file[students[studentIndex]])
+    exit()
 
   print ("# Found total %d student submissions for lab %s" % (len(students), lab.name))
   if cmdLine.args.failures:

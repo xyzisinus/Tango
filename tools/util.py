@@ -28,6 +28,8 @@ class CommandLine():
                         help="list student submissions")
     parser.add_argument('-j', '--jobs', action='store_true',
                         help="list all jobs (test index ignored)")
+    parser.add_argument('-p', '--poll', action='store_true',
+                        help="poll available student files")
     parser.add_argument('-d', '--dry_run', action='store_true',
                         help="dry_run")
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -116,6 +118,7 @@ class Cmd:
     self.run(myCmd)
 
   def poll(self, lab, studentFile):
+    print "### poll output file", studentFile["output"]
     myCmd = " --poll -l " + lab.courseLab
     self.run(myCmd + " --outputFile " + studentFile["output"])
 
