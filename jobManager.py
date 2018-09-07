@@ -60,72 +60,83 @@ class JobManager:
     def __manage(self):
         self.running = True
         while True:
-            id = self.jobQueue.getNextPendingJob()
-
-            if id:
-                self.log.info("_manage: next job id %s" % id)
-
-                job = self.jobQueue.get(id)
-                if job is not None:
-                    jobStr = ', '.join("%s: %s" % item for item in job.__dict__.items())
-                    # self.log.info("_manage job %s" % jobStr)
-                if not job.accessKey and Config.REUSE_VMS:
-                    id, vm = self.jobQueue.getNextPendingJobReuse(id)
-                    job = self.jobQueue.get(id)
-                    if job is not None:
-                        jobStr = ', '.join("%s: %s" % item for item in job.__dict__.items())
-                        self.log.info("_manage after getNextPendingJobReuse %s" % jobStr)
-                    else:
-                        self.log.info("_manage after getNextPendingJobReuse %s %s" % (id, vm))
-                try:
-                    # Mark the job assigned
-                    self.jobQueue.assignJob(job.id)
-                    self.log.info("_manage after assignJob %s" % id)
-                    # if the job has specified an account
-                    # create an VM on the account and run on that instance
-                    if job.accessKeyId:
-                        from vmms.ec2SSH import Ec2SSH
-                        vmms = Ec2SSH(job.accessKeyId, job.accessKey)
-                        newVM = copy.deepcopy(job.vm)
-                        newVM.id = self._getNextID()  # xxxXXX??? try this path
-                        preVM = vmms.initializeVM(newVM)
-                        self.log.info("_manage init new vm %s" % preVM.id)
-                    else:
-                        # Try to find a vm on the free list and allocate it to
-                        # the worker if successful.
-                        if Config.REUSE_VMS:
-                            preVM = vm
-                            self.log.info("_manage use vm %s" % preVM.id)
-                        else:
-                            # xxxXXX??? strongly suspect this code path doesn't work.
-                            # After setting REUSE_VMS to False, job submissions don't run.
-                            preVM = self.preallocator.allocVM(job.vm.pool)
-                            self.log.info("_manage allocate vm %s" % preVM.id)
-                        vmms = self.vmms[job.vm.vmms]  # Create new vmms object
-
-                    # Now dispatch the job to a worker
-                    self.log.info("Dispatched job %s:%d to %s [try %d]" %
-                                  (job.name, job.id, preVM.name, job.retries))
-                    job.appendTrace("Dispatched job %s:%d to %s [try %d]" %
-                                    (job.name, job.id, preVM.name, job.retries))
-
-                    Worker(
-                        job,
-                        vmms,
-                        self.jobQueue,
-                        self.preallocator,
-                        preVM
-                    ).start()
-
-                except Exception as err:
-                    if job is not None:
-                        self.jobQueue.makeDead(job.id, str(err))
-                    else:
-                        self.log.info("_manage: job is None")
-
-            # Sleep for a bit and then check again
             time.sleep(Config.DISPATCH_PERIOD)
 
+            id = self.jobQueue.getNextPendingJob()
+            job = None if not id else self.jobQueue.get(id)
+            if not job:
+                self.log.info("_manager no job from job queue")
+                continue
+
+            if not job.accessKey and Config.REUSE_VMS:
+                # when free pool is empty, allocate vms async
+                if self.preallocator.freePoolSize(job.vm.pool) == 0 and \
+                   self.preallocator.poolSize(job.vm.pool) < Config.POOL_SIZE:
+                    increment = 1
+                    if hasattr(Config, 'POOL_ALLOC_INCREMENT') and Config.POOL_ALLOC_INCREMENT:
+                        increment = Config.POOL_ALLOC_INCREMENT
+                    self.preallocator.incrementPoolSize(job.vm, increment)
+
+                # now try to get a vm.  It may not work because 1. allocating vm async
+                # is not done yet. Or 2. pool limit has reached.
+                vm = self.preallocator.allocVM(job.vm.pool)
+                if not vm:
+                    self.log.info("_manager no vm allocated to job %s" % id)
+                    continue
+                self.log.info("_manager vm %s allocated to job %s" % (vm.name, id))
+            else:
+                job = None  # without vm, make job undefined, to cause exception below
+
+            try:
+                # Mark the job assigned, make cause exception with job == None
+                self.jobQueue.assignJob(job.id)
+                self.log.info("_manage job assigned %s" % id)
+
+                # if the job has specified an account
+                # create an VM on the account and run on that instance
+                # xxxXXX??? must try it out.  don't think it will work
+                if job.accessKeyId:
+                    from vmms.ec2SSH import Ec2SSH
+                    vmms = Ec2SSH(job.accessKeyId, job.accessKey)
+                    newVM = copy.deepcopy(job.vm)
+                    newVM.id = self._getNextID()  # xxxXXX??? try this path
+                    preVM = vmms.initializeVM(newVM)
+                    self.log.info("_manage init new vm %s" % preVM.id)
+                else:
+                    # Try to find a vm on the free list and allocate it to
+                    # the worker if successful.
+                    if Config.REUSE_VMS:
+                        preVM = vm
+                        self.log.info("_manage use vm %s" % preVM.name)
+                    else:
+                        # xxxXXX??? strongly suspect this code path doesn't work.
+                        # After setting REUSE_VMS to False, job submissions don't run.
+                        preVM = self.preallocator.allocVM(job.vm.pool)
+                        self.log.info("_manage allocate vm %s" % preVM.name)
+                    vmms = self.vmms[job.vm.vmms]  # Create new vmms object
+
+                # Now dispatch the job to a worker
+                self.log.info("Dispatched job %s:%d to %s [try %d]" %
+                              (job.name, job.id, preVM.name, job.retries))
+                job.appendTrace("Dispatched job %s:%d to %s [try %d]" %
+                                (job.name, job.id, preVM.name, job.retries))
+
+                Worker(job,
+                       vmms,
+                       self.jobQueue,
+                       self.preallocator,
+                       preVM
+                ).start()
+
+            except Exception as err:
+                if job is not None:
+                    self.jobQueue.makeDead(job.id, str(err))
+                else:
+                    # when job has no vm, it may get here.  Not good coding practice
+                    self.log.info("_manage: job is None %s", err)
+
+        # END of while loop
+    # END of __manage function
 
 if __name__ == "__main__":
 

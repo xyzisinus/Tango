@@ -7,7 +7,7 @@
 # JobManager: Class that creates a thread object that looks for new
 # work on the job queue and assigns it to workers.
 #
-import threading, logging, time
+import threading, logging, time, random
 
 from datetime import datetime
 from tangoObjects import TangoDictionary, TangoJob
@@ -187,15 +187,49 @@ class JobQueue:
 
     def getNextPendingJob(self):
         """getNextPendingJob - Returns ID of next pending job from queue.
-        Called by JobManager when Config.REUSE_VMS==False
+        Called by JobManager
         """
+
         self.queueLock.acquire()
+
+        nextJobId = None
+        largestBucketSize = 0
+        roundRobinMixedQueue = []
+        poolBuckets = {}
+
+        # sort the jobs into buckets by the vm pool (derived from image)
         for id, job in self.liveJobs.iteritems():
+            if job.vm.pool in poolBuckets:
+                poolBuckets[job.vm.pool].append((id, job, job.vm.pool))
+            else:
+                poolBuckets[job.vm.pool] = [(id, job, job.vm.pool)]
+            if len(poolBuckets[job.vm.pool]) > largestBucketSize:
+                largestBucketSize = len(poolBuckets[job.vm.pool])
+
+        # add jobs into mixed queue round robin fashion
+        for i in xrange(largestBucketSize):
+            pools = poolBuckets.keys()
+            random.shuffle(pools)
+            for pool in pools:
+                if len(poolBuckets[pool]):
+                    roundRobinMixedQueue.append(poolBuckets[pool].pop(0))
+
+        # xxxXXX??? log the first 4 elements in the mixed queue
+        for i in xrange(4):
+            if i >= len(roundRobinMixedQueue):
+                break
+            (id, job, pool) = roundRobinMixedQueue[i]
+            self.log.debug("mix queue[%d] (total len %d): %s %s" %
+                           (i, len(roundRobinMixedQueue), id, pool))
+
+        for (id, job, pool) in roundRobinMixedQueue:
             if job.isNotAssigned():
-                self.queueLock.release()
-                return id
+                self.log.info("getNextPendingJob: next job %s in pool %s" % (id, pool))
+                nextJobId = id
+                break
+
         self.queueLock.release()
-        return None
+        return nextJobId
 
     def getNextPendingJobReuse(self, target_id=None):
         """getNextPendingJobReuse - Returns ID of next pending job and its VM.
