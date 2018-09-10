@@ -239,7 +239,7 @@ class Ec2SSH:
                 self.key_pair_name = config.Config.SECURITY_KEY_NAME
                 self.key_pair_path = config.Config.SECURITY_KEY_PATH
             else:
-                self.key_pair_name = self.keyPairName(vm.id, vm.name)
+                self.key_pair_name = self.keyPairName(vm.id, vm.pool)
                 self.key_pair_path = self.createKeyPair()
 
             reservation = self.boto3resource.create_instances(ImageId=ec2instance['ami'],
