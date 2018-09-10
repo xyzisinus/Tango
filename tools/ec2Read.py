@@ -274,20 +274,38 @@ if argCreateVMs:
 
 # ec2WithKey can be used to test the case that tango_cli uses
 # non-default aws access id and key
+
+# to test, run
+# sudo python tools/ec2Read.py -a "accessKeyId accessKey user image"
+# accessKeyId and accessKey can be found in boto.cfg, user should exist on the image
+# and the image must allow aws to install the public
+# part of the ssh key to the vm at startup time.  Our autograde images are not
+# suitable because they have the public key preinstalled and disallow aws to install.
+
+# to manually test the ssh command, create a vm using a autograde image, do
+# sudo ssh -v -i deployment/config/746-autograde.pem -o "StrictHostKeyChecking no" -o "GSSAPIAuthentication no" autolab@<ip of the vm>
+
+# to manually test the ssh command using generated pem file, create a vm using
+# the image that allows aws to ship the public part of ssh key to the vm, do
+# sudo ssh -v -i /<vm name>.pem -o "StrictHostKeyChecking no" -o "GSSAPIAuthentication no" <user>@<ip of the vm>
+
 if argAccessIdKeyUser:
-  if len(argAccessIdKeyUser.split()) != 3:
-    print "access id, key and user must be quoted and space separated"
+  if len(argAccessIdKeyUser.split()) != 4:
+    print "access id, key, user and image must be quoted and space separated"
     exit()
-  (id, key, user) = argAccessIdKeyUser.split()
+  (id, key, user, image) = argAccessIdKeyUser.split()
   ec2WithKey = Ec2SSH(accessKeyId=id, accessKey=key, ec2User=user)
-  vm = TangoMachine(vmms="ec2SSH")
-  vm.id = int(2000)  # a high enough number to avoid collision
-  # to test non-default access id/key, the aws image must have the key manually
-  # installed or allows the key to be installed by the aws service.
-  # the following assumes we have such image with a "Name" tag "test01.img"
-  vm.pool = "test01"
+  vm = TangoMachine(vmms="ec2SSH", image=image)
+  vm.id = int(2000)  # a high enough number to avoid collisio with existing vms
   ec2WithKey.initializeVM(vm)
   ec2WithKey.waitVM(vm, Config.WAITVM_TIMEOUT)
+  print "Instances after creating special vm", vm.name
+  listInstances()
+
+  # delete vm, the key pair for vm acces from aws, the /vmName.pem file
+  vmName = vm.name
+  ec2WithKey.destroyVM(vm)
+  print "Instances after destroying special vm", vmName
   listInstances()
 
 # Write combination of ops not provided by the command line options here:
