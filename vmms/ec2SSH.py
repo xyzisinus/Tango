@@ -69,9 +69,6 @@ def timeoutWithReturnStatus(command, time_out, returnValue=0):
             return ret
 
 class Ec2SSH:
-    _SSH_FLAGS = ["-i", config.Config.SECURITY_KEY_PATH,
-                  "-o", "StrictHostKeyChecking no",
-                  "-o", "GSSAPIAuthentication no"]
     _SECURITY_KEY_PATH_INDEX_IN_SSH_FLAGS = 1
 
     def __init__(self, accessKeyId=None, accessKey=None, ec2User=None):
@@ -85,7 +82,9 @@ class Ec2SSH:
         self.log = logging.getLogger("Ec2SSH-" + str(os.getpid()))
         self.log.info("init Ec2SSH")
 
-        self.ssh_flags = Ec2SSH._SSH_FLAGS
+        self.ssh_flags = ["-i", config.Config.SECURITY_KEY_PATH,
+                          "-o", "StrictHostKeyChecking no",
+                          "-o", "GSSAPIAuthentication no"]
         self.ec2User = ec2User if ec2User else config.Config.EC2_USER_NAME
         self.useDefaultKeyPair = False if accessKeyId else True
 
@@ -195,6 +194,7 @@ class Ec2SSH:
 
         # change the SSH_FLAG accordingly
         self.ssh_flags[Ec2SSH._SECURITY_KEY_PATH_INDEX_IN_SSH_FLAGS] = self.key_pair_path
+        self.log.debug("ssh flags when using access id/key: %s" % self.ssh_flags)
         return self.key_pair_path
 
     def deleteKeyPair(self):
