@@ -110,6 +110,8 @@ class Cmd:
     myCmd = " --addJob --image " + lab.image + " -l " + lab.courseLab
     myCmd += " --jobname job_" + studentFile["job"]
     myCmd += " --outputFile " + studentFile["output"]
+    # myCmd += " --accessKeyId " + "AKIAINNC4HTEWGNU4YZQ"
+    # myCmd += " --accessKey " + "bhFMk920LaZRYcr8cIChIGiCRaWw/80E26z7UBwZ"
     myCmd += " --infiles"
     myCmd += " '{\"localFile\": \"%s\", \"destFile\": \"%s\"}' " % \
              (studentFile["base"], studentFile["stripped"])

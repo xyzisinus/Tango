@@ -281,12 +281,14 @@ if argCreateVMs:
 # and the image must allow aws to install the public
 # part of the ssh key to the vm at startup time.  Our autograde images are not
 # suitable because they have the public key preinstalled and disallow aws to install.
+# So far, assume the image is a stock aws image with a Name tag containing "test".
 
-# to manually test the ssh command, create a vm using a autograde image, do
+# to manually test the ssh command, if things doesn't work as expected,
+# create a vm using an image with autograder, do
 # sudo ssh -v -i deployment/config/746-autograde.pem -o "StrictHostKeyChecking no" -o "GSSAPIAuthentication no" autolab@<ip of the vm>
 
-# to manually test the ssh command using generated pem file, create a vm using
-# the image that allows aws to ship the public part of ssh key to the vm, do
+# to manually test the ssh command using generated pem file with access id/key is
+# in use, create a vm using the special "test" image (see above), do
 # sudo ssh -v -i /<vm name>.pem -o "StrictHostKeyChecking no" -o "GSSAPIAuthentication no" <user>@<ip of the vm>
 
 if argAccessIdKeyUser:
@@ -295,20 +297,44 @@ if argAccessIdKeyUser:
     exit()
   (id, key, user, image) = argAccessIdKeyUser.split()
   ec2WithKey = Ec2SSH(accessKeyId=id, accessKey=key, ec2User=user)
-  vm = TangoMachine(vmms="ec2SSH", image=image)
-  vm.id = int(2000)  # a high enough number to avoid collisio with existing vms
-  ec2WithKey.initializeVM(vm)
-  ec2WithKey.waitVM(vm, Config.WAITVM_TIMEOUT)
-  print "Instances after creating special vm", vm.name
+  vm = TangoMachine(image=image)
+  vm.id = int(30000)  # a high enough number to avoid collision with existing vms
+  specialVM = ec2WithKey.initializeVM(vm)
+  if not specialVM:
+      print "exit after failure to get special vm"
+      exit()
+  if ec2WithKey.waitVM(specialVM, Config.WAITVM_TIMEOUT) != 0:
+      print "exit after failure to wait for vm", specialVM.name
+      exit()
+  print "Instances after creating special vm", specialVM.name
   listInstances()
 
   # delete vm, the key pair for vm acces from aws, the /vmName.pem file
-  vmName = vm.name
-  ec2WithKey.destroyVM(vm)
-  print "Instances after destroying special vm", vmName
+  vmName = specialVM.name
+  ec2WithKey.destroyVM(specialVM)
+
+  # Also create vm without the special access key
+  normalImage = None
+  for img in ec2.img2ami.keys():
+      if not re.search('test', img, re.IGNORECASE):
+          normalImage = img
+          print "found non-test image", normalImage
+          break
+
+  vm = TangoMachine(image=normalImage)
+  vm.id = int(30001)  # a high enough number to avoid collisio with existing vms
+  normalVM = ec2.initializeVM(vm)
+  if not normalVM:
+      print "exit after failure to get normal vm"
+      exit()
+  if ec2.waitVM(normalVM, Config.WAITVM_TIMEOUT) != 0:
+      print "exit after failure to wait for vm", normalVM.name
+      exit()
+  print "Instances after creating normal vm", normalVM.name
+  listInstances()
+  ec2.destroyVM(normalVM)
+
+  print "Instances after destroying both vm"
   listInstances()
 
 # Write combination of ops not provided by the command line options here:
-
-
-
