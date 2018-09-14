@@ -307,7 +307,20 @@ if argAccessIdKeyUser:
       exit()
   if ec2WithKey.waitVM(specialVM, Config.WAITVM_TIMEOUT) != 0:
       print "exit after failure to wait for vm", specialVM.name
+      ec2WithKey.destroyVM(specialVM)
       exit()
+
+  # copy something to the vm and copy it back
+  if ec2WithKey.copyIn(specialVM, []) != 0:
+      print "exit after failure to copy to vm", specialVM.name
+      ec2WithKey.destroyVM(specialVM)
+      exit()
+  outFile = "/tmp/TangoAccessIdKeyTestOutput_" + specialVM.name
+  if ec2WithKey.copyOut(specialVM, outFile) != 0:
+      print "exit after failure to copy from vm", specialVM.name
+      ec2WithKey.destroyVM(specialVM)
+      exit()
+
   print "Instances after creating special vm", specialVM.name
   listInstances()
 

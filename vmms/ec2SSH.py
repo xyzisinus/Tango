@@ -86,7 +86,17 @@ class Ec2SSH:
                           "-o", "StrictHostKeyChecking no",
                           "-o", "GSSAPIAuthentication no"]
         self.ec2User = ec2User if ec2User else config.Config.EC2_USER_NAME
+
+        # access id/key related:
         self.useDefaultKeyPair = False if accessKeyId else True
+        self.accessKeyId = accessKeyId
+        self.accessKey = accessKey
+        # use a test only path, with access id/key and if config.py says so
+        if hasattr(config.Config, 'EC2_ACCESS_ID_KEY_CODE_PATH_TEST_ONLY') and \
+           config.Config.EC2_ACCESS_ID_KEY_CODE_PATH_TEST_ONLY and accessKeyId:
+            self.accessIdKeyCodePathTest = True
+            if not ec2User:
+                self.ec2User = config.Config.EC2_USER_NAME_ACCESS_ID_KEY_TEST_ONLY
 
         self.img2ami = {}
         images = []
@@ -381,15 +391,27 @@ class Ec2SSH:
 
         # Create a fresh input directory
         ret = subprocess.call(["ssh"] + self.ssh_flags +
-                              ["%s@%s" % (config.Config.EC2_USER_NAME, domain_name),
+                              ["%s@%s" % (self.ec2User, domain_name),
                                "(rm -rf autolab; mkdir autolab)"])
+
+        # on test only path, copy a fake input file to vm,
+        # so that the copyout function can succeed.
+        if self.accessIdKeyCodePathTest:
+            ret = -1
+            fakeInputFile = "/tmp/TangoAccessIdKeyTestInput_" + vm.name
+            os.system("echo 'Tango access id/key test' > %s" % fakeInputFile)
+            ret = timeout(["scp"] +
+                          self.ssh_flags +
+                          [fakeInputFile, "%s@%s:output" % (self.ec2User, domain_name)],
+                          config.Config.COPYIN_TIMEOUT)
+            return ret
 
         # Copy the input files to the input directory
         for file in inputFiles:
             ret = timeout(["scp"] +
                           self.ssh_flags +
                           [file.localFile, "%s@%s:autolab/%s" %
-                           (config.Config.EC2_USER_NAME, domain_name, file.destFile)],
+                           (self.ec2User, domain_name, file.destFile)],
                             config.Config.COPYIN_TIMEOUT)
             if ret != 0:
                 return ret
@@ -402,6 +424,13 @@ class Ec2SSH:
         """
         domain_name = self.domainName(vm)
         self.log.debug("runJob: Running job on VM %s" % vm.name)
+
+        # on test only path, ssh in and exit
+        if self.accessIdKeyCodePathTest:
+            ret = timeout(["ssh"] + self.ssh_flags +
+                          ["%s@%s" % (self.ec2User, domain_name),
+                           "(:)"], config.Config.COPYIN_TIMEOUT)
+            return ret
 
         # Setting arguments for VM and running job
         runcmd = "/usr/bin/time --output=time.out autodriver \
@@ -421,7 +450,7 @@ class Ec2SSH:
         # runTimeout * 2 is a conservative estimate.
         # autodriver handles timeout on the target vm.
         ret = timeout(["ssh"] + self.ssh_flags +
-                       ["%s@%s" % (config.Config.EC2_USER_NAME, domain_name), runcmd], runTimeout * 2)
+                      ["%s@%s" % (self.ec2User, domain_name), runcmd], runTimeout * 2)
         return ret
 
     def copyOut(self, vm, destFile):
@@ -440,9 +469,7 @@ class Ec2SSH:
                 time_info = subprocess.check_output(
                     ['ssh'] +
                     self.ssh_flags +
-                    [
-                        "%s@%s" % (config.Config.EC2_USER_NAME, domain_name),
-                        'cat time.out']).rstrip('\n')
+                    ["%s@%s" % (self.ec2User, domain_name), 'cat time.out']).rstrip('\n')
 
                 # If the output is empty, then ignore it (timing info wasn't
                 # collected), otherwise let's log it!
@@ -463,7 +490,7 @@ class Ec2SSH:
                 pass
 
         return timeout(["scp"] + self.ssh_flags +
-                       ["%s@%s:output" % (config.Config.EC2_USER_NAME, domain_name), destFile],
+                       ["%s@%s:output" % (self.ec2User, domain_name), destFile],
                        config.Config.COPYOUT_TIMEOUT)
 
     def destroyVM(self, vm):
