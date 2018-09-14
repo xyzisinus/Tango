@@ -89,6 +89,7 @@ class Ec2SSH:
 
         # access id/key related:
         self.useDefaultKeyPair = False if accessKeyId else True
+        self.accessIdKeyCodePathTest = False
         self.accessKeyId = accessKeyId
         self.accessKey = accessKey
         # use a test only path, with access id/key and if config.py says so
@@ -399,7 +400,7 @@ class Ec2SSH:
         if self.accessIdKeyCodePathTest:
             ret = -1
             fakeInputFile = "/tmp/TangoAccessIdKeyTestInput_" + vm.name
-            os.system("echo 'Tango access id/key test' > %s" % fakeInputFile)
+            os.system("echo 'Tango access id/key test. THE END' > %s" % fakeInputFile)
             ret = timeout(["scp"] +
                           self.ssh_flags +
                           [fakeInputFile, "%s@%s:output" % (self.ec2User, domain_name)],
