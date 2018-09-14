@@ -77,7 +77,7 @@ class Worker(threading.Thread):
 
             self.appendMsg(
                 hdrfile,
-                "Internal error: Unable to complete job after %d tries. Pleae resubmit" %
+                "Internal error: Unable to complete job after %d re-tries. Pleae resubmit" %
                 (Config.JOB_RETRIES))
             self.appendMsg(
                 hdrfile,
@@ -87,7 +87,9 @@ class Worker(threading.Thread):
                     ret["runjob"],
                     ret["copyout"]))
 
-            self.catFiles(hdrfile, self.job.outputFile)
+            # Only add message to the output file when copyout succeeds
+            if ret["copyout"] and int(ret["copyout"]) == 0:
+                self.catFiles(hdrfile, self.job.outputFile)
             self.detachVM(return_vm=False)
             self.notifyServer(self.job)
 

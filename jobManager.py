@@ -84,28 +84,29 @@ class JobManager:
                     self.log.info("_manager no vm allocated to job %s" % id)
                     continue
                 self.log.info("_manager vm %s allocated to job %s" % (vm.name, id))
-            else:
-                job = None  # without vm, make job undefined, to cause exception below
 
             try:
-                # Mark the job assigned, make cause exception with job == None
-                self.jobQueue.assignJob(job.id)
-                self.log.info("_manage job assigned %s" % id)
-
-                # if the job has specified an account
-                # create an VM on the account and run on that instance
-                # xxxXXX??? must try it out.  don't think it will work
                 if job.accessKeyId:
+                    # if the job has specified special aws access id/key,
+                    # create a special vmms using the id/key and carry the vmms
+                    # in the job object.  Create a vm using the vmms and destroy
+                    # it after the job.  preallocator is not used.
+
                     from vmms.ec2SSH import Ec2SSH
                     vmms = Ec2SSH(job.accessKeyId, job.accessKey)
                     newVM = copy.deepcopy(job.vm)
-                    newVM.id = self._getNextID()  # xxxXXX??? try this path
+                    newVM.id = self._getNextID()
                     preVM = vmms.initializeVM(newVM)
-                    self.log.info("_manage init new vm %s" % preVM.id)
+                    self.log.info("_manage with aws access id/key: init vm %s for job %s" %
+                                  (preVM.name, job.id))
+                    self.jobQueue.assignJob(job.id)
                 else:
                     # Try to find a vm on the free list and allocate it to
                     # the worker if successful.
                     if Config.REUSE_VMS:
+                        self.jobQueue.assignJob(job.id)
+                        self.log.info("_manage job %s assigned to %s for REUSE_VMS" %
+                                      (id, vm.name))
                         preVM = vm
                         self.log.info("_manage use vm %s" % preVM.name)
                     else:
