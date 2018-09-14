@@ -32,6 +32,12 @@ class CommandLine():
                         help="poll available student files")
     parser.add_argument('-d', '--dry_run', action='store_true',
                         help="dry_run")
+    # aws access id/key can be found in deployment/config/boto.cfg.
+    # access id and key are space-separated and quoted in a string.
+    # the image for the jobs must allow aws to install the pub key.
+    # our autograder-enabled images don't have such property.
+    parser.add_argument('-a', '--accessIdKey',
+                        help="aws access id and key, space separated")
     parser.add_argument('-v', '--verbose', action='store_true',
                         help="more info")
     self.args = parser.parse_args()
@@ -110,8 +116,14 @@ class Cmd:
     myCmd = " --addJob --image " + lab.image + " -l " + lab.courseLab
     myCmd += " --jobname job_" + studentFile["job"]
     myCmd += " --outputFile " + studentFile["output"]
-    # myCmd += " --accessKeyId " + "AKIAINNC4HTEWGNU4YZQ"
-    # myCmd += " --accessKey " + "bhFMk920LaZRYcr8cIChIGiCRaWw/80E26z7UBwZ"
+    # job can be submit using non-default aws access id/key
+    if self.cmdLine.args.accessIdKey:
+        if len(self.cmdLine.args.accessIdKey.split()) != 2:
+            print "Invalid access id/key"
+            exit()
+        (accessId, accessKey) = self.cmdLine.args.accessIdKey.split()
+        myCmd += " --accessKeyId " + accessId
+        myCmd += " --accessKey " + accessKey
     myCmd += " --infiles"
     myCmd += " '{\"localFile\": \"%s\", \"destFile\": \"%s\"}' " % \
              (studentFile["base"], studentFile["stripped"])

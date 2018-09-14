@@ -290,6 +290,8 @@ if argCreateVMs:
 # to manually test the ssh command using generated pem file with access id/key is
 # in use, create a vm using the special "test" image (see above), do
 # sudo ssh -v -i /<vm name>.pem -o "StrictHostKeyChecking no" -o "GSSAPIAuthentication no" <user>@<ip of the vm>
+# like
+# sudo ssh -v -i /pdl-10002-sshtest.pem  -o "StrictHostKeyChecking no" -o "GSSAPIAuthentication no" ec2-user@18.212.159.60
 
 if argAccessIdKeyUser:
   if len(argAccessIdKeyUser.split()) != 4:
