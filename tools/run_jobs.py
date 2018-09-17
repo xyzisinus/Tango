@@ -186,12 +186,22 @@ for labIndex in cmdLine.args.indecies:
   cmd.upload(lab, lab.makefile)
   cmd.upload(lab, lab.autogradeTar)
 
+  # before sending the jobs, clean the existing ouput files.
+  # also collect the files locations for output file waiting.
+  for i in studentIndexList:
+    outputFile = lab.outputDir + "/" + student2file[students[i]]["output"]
+    outputFiles.append(outputFile)
+    try:
+      os.remove(outputFile)
+      print "# Delete existing output file:", outputFile
+    except OSError:
+      pass
+
   # load and run student submission
   for i in studentIndexList:
     print ("\n# Submit %s for lab %s" % (students[i], lab.name))
     cmd.upload(lab, student2file[students[i]]["full"])
     cmd.addJob(lab, student2file[students[i]])
-    outputFiles.append(lab.outputDir + "/" + student2file[students[i]]["output"])
 # end of main loop "cmdLine.args.indecies"
 
 if cmdLine.args.dry_run:
