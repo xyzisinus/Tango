@@ -46,7 +46,7 @@ class Worker(threading.Thread):
         (if not return_vm).
         """
         # job-owned instance, simply destroy after job is completed
-        if self.job.accessKeyId:
+        if self.job.accessKeyId or not Config.REUSE_VMS:
             self.vmms.safeDestroyVM(self.job.vm)
         elif return_vm:
             # put vm into free pool.  may destroy it if free pool is over low water mark

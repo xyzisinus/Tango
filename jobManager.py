@@ -9,7 +9,7 @@
 # is launched that will handle things from here on. If anything goes
 # wrong, the job is made dead with the error.
 #
-import threading, logging, time, copy, os
+import threading, logging, time, copy, os, calendar
 
 from datetime import datetime
 from tango import *
@@ -59,13 +59,18 @@ class JobManager:
 
     def __manage(self):
         self.running = True
+        lastEmptyQueueReportTime = 0.0
+
         while True:
             time.sleep(Config.DISPATCH_PERIOD)
 
             id = self.jobQueue.getNextPendingJob()
             job = None if not id else self.jobQueue.get(id)
             if not job:
-                self.log.info("_manager no job from job queue")
+                currentTime = calendar.timegm(time.gmtime())
+                if currentTime - lastEmptyQueueReportTime > 30.0:  # avoid logging too often
+                    self.log.info("_manager no job from job queue")
+                    lastEmptyQueueReportTime = currentTime
                 continue
 
             if not job.accessKey and Config.REUSE_VMS:
@@ -100,20 +105,21 @@ class JobManager:
                     self.log.info("_manage with aws access id/key: init vm %s for job %s" %
                                   (preVM.name, job.id))
                     self.jobQueue.assignJob(job.id)
-                else:
-                    # Try to find a vm on the free list and allocate it to
-                    # the worker if successful.
-                    if Config.REUSE_VMS:
-                        self.jobQueue.assignJob(job.id)
-                        self.log.info("_manage job %s assigned to %s for REUSE_VMS" %
-                                      (id, vm.name))
-                        preVM = vm
-                        self.log.info("_manage use vm %s" % preVM.name)
-                    else:
-                        # xxxXXX??? strongly suspect this code path doesn't work.
-                        # After setting REUSE_VMS to False, job submissions don't run.
-                        preVM = self.preallocator.allocVM(job.vm.pool)
-                        self.log.info("_manage allocate vm %s" % preVM.name)
+                elif not Config.REUSE_VMS:
+                    from vmms.ec2SSH import Ec2SSH
+                    vmms = Ec2SSH()
+                    newVM = copy.deepcopy(job.vm)
+                    newVM.id = self._getNextID()
+                    preVM = vmms.initializeVM(newVM)
+                    self.log.info("_manage without preallocator: init vm %s for job %s" %
+                                  (preVM.name, job.id))
+                    self.jobQueue.assignJob(job.id)
+                else:  # Config.REUSE_VMS is true
+                    # already have vm from preallocator
+                    self.jobQueue.assignJob(job.id)
+                    preVM = vm
+                    self.log.info("_manage use preallocator: vm %s assigned to job %s" %
+                                  (preVM.name, job.id))
                     vmms = self.vmms[job.vm.vmms]  # Create new vmms object
 
                 # Now dispatch the job to a worker
