@@ -120,6 +120,13 @@ class Worker(threading.Thread):
         os.rename(tmpname, f2)
         os.remove(f1)
 
+    # Note: How notifyURL works
+    # When the web app side (Autolab) sends a job, there is a callback_url.
+    # It contains Autolab's REST address and a unique string for the job.
+    # The callback_url is kept in the job as "notifyURL" (in convertJobObj()).
+    # After the job is executed, the following function is called to send
+    # a request to Autolab, indicating that the job is done.
+    #
     def notifyServer(self, job):
         try:
             if job.notifyURL:
