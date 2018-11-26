@@ -254,13 +254,7 @@ class Ec2SSH:
             time.sleep(config.Config.TIMER_POLL_INTERVAL)
 
             newInstance = reservation[0]
-            if newInstance:
-                # Assign name to EC2 instance
-                self.boto3resource.create_tags(Resources=[newInstance.id],
-                                            Tags=[{"Key": "Name", "Value": vm.name}])
-                self.log.info("new instance %s created with name tag %s" %
-                              (newInstance.id, vm.name))
-            else:
+            if not newInstance:
                 raise ValueError("cannot find new instance for %s" % vm.name)
 
             # Wait for instance to reach 'running' state
@@ -290,6 +284,12 @@ class Ec2SSH:
                 time.sleep(config.Config.TIMER_POLL_INTERVAL)
             # end of while loop
 
+            # Assign name to EC2 instance
+            self.boto3resource.create_tags(Resources=[newInstance.id],
+                                           Tags=[{"Key": "Name", "Value": vm.name}])
+            self.log.info("new instance %s created with name tag %s" %
+                          (newInstance.id, vm.name))
+
             self.log.info(
                 "VM %s | State %s | Reservation %s | Public DNS Name %s | Public IP Address %s" %
                 (vm.name,
@@ -305,9 +305,13 @@ class Ec2SSH:
             return vm
 
         except Exception as e:
-            self.log.error("initializeVM Failed: %s" % e)
+            self.log.error("initializeVM Failed for vm %s: %s" % (vm.name, e))
             if newInstance:
-                self.boto3resource.instances.filter(InstanceIds=[newInstance.id]).terminate()
+                try:
+                    self.boto3resource.instances.filter(InstanceIds=[newInstance.id]).terminate()
+                except Exception as e:
+                    self.log.error("Exception handling failed for %s: %s" % (vm.name, e))
+                    return None
             return None
 
     def waitVM(self, vm, max_secs):
